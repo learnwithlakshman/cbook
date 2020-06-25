@@ -1,10 +1,16 @@
 package com.lwl.cbook.auth;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,26 +21,38 @@ import org.springframework.stereotype.Service;
 @Service
 public class AppUserDetailsService implements UserDetailsService {
 	
-	private  BCryptPasswordEncoder bCryptPasswordEncoder;
-	Map<String, UserDetails> map;
+	private Logger log = LoggerFactory.getLogger(AppUserDetailsService.class);
+	
+	@Autowired
+	private AppUserRepo appUserRepo;
+	
 
 	@Autowired
 	public AppUserDetailsService(BCryptPasswordEncoder bCryptPasswordEncoder) {
-		this.bCryptPasswordEncoder = bCryptPasswordEncoder;
-		map = new HashMap<>();
-		UserDetails user1 = User.builder().username("user").password(this.bCryptPasswordEncoder.encode("userpwd"))
-				.roles("USER").build();
-		UserDetails user2 = User.builder().username("admin").password(this.bCryptPasswordEncoder.encode("adminpwd"))
-				.roles("ADMIN").build();
-		map.put("user", user1);
-		map.put("admin", user2);
-
 	}
 
 	@Override
-	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-		return Optional.of(map.get(username)).map(e ->e)
-				.orElseThrow(() -> new UsernameNotFoundException("User not found with given name"));
+	public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+		log.debug("user trying to login:{}",email);
+		AppUser user = appUserRepo.findByUsername(email);
+		if (user != null) {
+			List<GrantedAuthority> authorities = getUserAuthority(user.getRoles());
+			return buildUserForAuthentication(user, authorities);
+		} else {
+			throw new UsernameNotFoundException("username not found");
+		}
+	}
+
+	private UserDetails buildUserForAuthentication(AppUser user, List<GrantedAuthority> authorities) {
+		return new User(user.getUsername(),user.getPassword(), authorities);
+	}
+
+	private List<GrantedAuthority> getUserAuthority(Set<Role> roles) {
+		Set<GrantedAuthority> r = new HashSet<>();
+		roles.forEach(role -> r.add(new SimpleGrantedAuthority(role.getRole())));
+		List<GrantedAuthority> grantedAuthorities = new ArrayList<>(r);
+		log.debug("User has total authorities is :{}",grantedAuthorities.size());
+		return grantedAuthorities;
 	}
 
 }
